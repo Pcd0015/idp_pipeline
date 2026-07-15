@@ -1,0 +1,105 @@
+services:
+  - type: web
+    name: idp-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        sync: false      # paste your Neon connection string in the Render dashboard
+      - key: GEMINI_API_KEY
+        sync: false      # paste your Gemini key in the Render dashboard
+      - key: ADMIN_API_KEY
+        generateValue: true
+      - key: REDIS_URL
+        fromService:
+          name: idp-redis
+          type: redis
+          property: connectionString
+      - key: CELERY_BROKER_URL
+        fromService:
+          name: idp-redis
+          type: redis
+          property: connectionString
+      - key: CELERY_RESULT_BACKEND
+        fromService:
+          name: idp-redis
+          type: redis
+          property: connectionString
+      - key: STORAGE_BACKEND
+        value: b2
+      - key: B2_ENDPOINT_URL
+        sync: false
+      - key: B2_KEY_ID
+        sync: false
+      - key: B2_APPLICATION_KEY
+        sync: false
+      - key: B2_BUCKET_NAME
+        sync: false
+      - key: LLM_MODEL
+        value: gemini-2.5-flash
+      - key: OCR_PROVIDER
+        value: tesseract
+      - key: CONFIDENCE_THRESHOLD
+        value: "0.80"
+      - key: MAX_FILE_SIZE_MB
+        value: "20"
+      - key: LOG_LEVEL
+        value: INFO
+      - key: ALLOWED_ORIGINS
+        value: "*"
+      - key: RATE_LIMIT_UPLOADS
+        value: "5/hour"
+
+  - type: worker
+    name: idp-worker
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerCommand: celery -A app.celery_app.celery_app worker --loglevel=info --concurrency=2
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: REDIS_URL
+        fromService:
+          name: idp-redis
+          type: redis
+          property: connectionString
+      - key: CELERY_BROKER_URL
+        fromService:
+          name: idp-redis
+          type: redis
+          property: connectionString
+      - key: CELERY_RESULT_BACKEND
+        fromService:
+          name: idp-redis
+          type: redis
+          property: connectionString
+      - key: STORAGE_BACKEND
+        value: b2
+      - key: B2_ENDPOINT_URL
+        sync: false
+      - key: B2_KEY_ID
+        sync: false
+      - key: B2_APPLICATION_KEY
+        sync: false
+      - key: B2_BUCKET_NAME
+        sync: false
+      - key: LLM_MODEL
+        value: gemini-2.5-flash
+      - key: OCR_PROVIDER
+        value: tesseract
+      - key: CONFIDENCE_THRESHOLD
+        value: "0.80"
+      - key: MAX_FILE_SIZE_MB
+        value: "20"
+      - key: LOG_LEVEL
+        value: INFO
+
+  - type: redis
+    name: idp-redis
+    plan: free
+    ipAllowList: []

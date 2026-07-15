@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bill Upload — IDP Pipeline</title>
+<style>
+  :root { color-scheme: light; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #f5f5f7; margin: 0; padding: 40px 20px;
+    display: flex; flex-direction: column; align-items: center;
+  }
+  h1 { font-size: 22px; color: #1d1d1f; margin-bottom: 4px; }
+  p.sub { color: #6e6e73; margin-top: 0; margin-bottom: 28px; }
+  .dropzone {
+    width: 100%; max-width: 480px; min-height: 180px;
+    border: 2px dashed #b0b0b6; border-radius: 14px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: #fff; cursor: pointer; transition: border-color .15s, background .15s;
+    padding: 24px; text-align: center;
+  }
+  .dropzone.drag { border-color: #0071e3; background: #f0f7ff; }
+  .dropzone svg { margin-bottom: 10px; }
+  .dropzone .hint { color: #6e6e73; font-size: 13px; margin-top: 6px; }
+  input[type=file] { display: none; }
+  .results { width: 100%; max-width: 480px; margin-top: 22px; }
+  .card {
+    background: #fff; border-radius: 12px; padding: 16px 18px;
+    margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.06);
+  }
+  .card .name { font-weight: 600; font-size: 14px; color: #1d1d1f; }
+  .card .status { font-size: 13px; margin-top: 4px; }
+  .status.pending, .status.processing { color: #b06a00; }
+  .status.completed { color: #1a7f37; }
+  .status.needs_review { color: #b0332f; }
+  .status.failed { color: #b0332f; }
+  .error { color: #b0332f; font-size: 13px; margin-top: 10px; }
+</style>
+</head>
+<body>
+  <h1>Upload a bill / invoice</h1>
+  <p class="sub">Drag and drop, or click to choose a file (PDF, PNG, JPG, TIFF)</p>
+
+  <div class="dropzone" id="dropzone">
+    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#8a8a8e" stroke-width="1.5">
+      <path d="M12 16V4M12 4l-4 4M12 4l4 4" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <div>Click or drop a file here</div>
+    <div class="hint">Max file size enforced by server</div>
+    <input type="file" id="fileInput" accept=".pdf,.png,.jpg,.jpeg,.tiff">
+  </div>
+
+  <div class="error" id="errorMsg"></div>
+  <div class="results" id="results"></div>
+
+<script>
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const results = document.getElementById('results');
+const errorMsg = document.getElementById('errorMsg');
+
+dropzone.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropzone.classList.remove('drag');
+  if (e.dataTransfer.files.length) uploadFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', () => {
+  if (fileInput.files.length) uploadFile(fileInput.files[0]);
+});
+
+async function uploadFile(file) {
+  errorMsg.textContent = '';
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML = `<div class="name">${file.name}</div><div class="status pending">Uploading…</div>`;
+  results.prepend(card);
+  const statusEl = card.querySelector('.status');
+
+  try {
+    const res = await fetch('/documents/upload', { method: 'POST', body: formData });
+    if (res.status === 429) {
+      statusEl.textContent = 'Rate limit reached — try again later';
+      statusEl.className = 'status failed';
+      return;
+    }
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      statusEl.textContent = err.detail || 'Upload failed';
+      statusEl.className = 'status failed';
+      return;
+    }
+    const data = await res.json();
+    statusEl.textContent = 'Pending…';
+    pollStatus(data.document_id, statusEl);
+  } catch (e) {
+    statusEl.textContent = 'Upload failed — network error';
+    statusEl.className = 'status failed';
+  }
+}
+
+async function pollStatus(documentId, statusEl) {
+  const poll = async () => {
+    try {
+      const res = await fetch(`/documents/${documentId}/status`);
+      if (!res.ok) return;
+      const data = await res.json();
+      statusEl.textContent = describeStatus(data.status, data.confidence_score);
+      statusEl.className = 'status ' + data.status;
+      if (data.status === 'pending' || data.status === 'processing') {
+        setTimeout(poll, 3000);
+      }
+    } catch (e) { /* stop polling silently on network error */ }
+  };
+  poll();
+}
+
+function describeStatus(status, confidence) {
+  switch (status) {
+    case 'pending': return 'Pending…';
+    case 'processing': return 'Processing…';
+    case 'completed': return `Completed${confidence != null ? ' (' + Math.round(confidence*100) + '% confidence)' : ''}`;
+    case 'needs_review': return 'Needs human review';
+    case 'failed': return 'Processing failed';
+    default: return status;
+  }
+}
+</script>
+</body>
+</html>

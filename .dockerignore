@@ -1,0 +1,14 @@
+.env
+.git
+.gitignore
+__pycache__/
+*.pyc
+venv/
+.venv/
+.pytest_cache/
+.coverage
+storage/
+pg_data/
+tests/
+README.md
+IDP_System_Design.md
