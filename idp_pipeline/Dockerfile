@@ -23,4 +23,7 @@ USER appuser
 EXPOSE 8000
 # --reload is intentionally omitted here (dev-only, docker-compose.yml
 # overrides this command with --reload for local development).
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+# Single worker: on Render's free tier (512MB RAM), document processing
+# now runs in this same process via BackgroundTasks, so we keep memory
+# headroom rather than running multiple uvicorn workers.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

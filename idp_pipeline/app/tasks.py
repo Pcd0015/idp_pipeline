@@ -1,7 +1,14 @@
 """
-Celery task(s) that orchestrate the full IDP pipeline. Kept as one task
-with clear stages (rather than a chain of many small tasks) so the whole
-run is easy to trace in logs and easy to retry as a unit.
+The document pipeline, as a plain function (`run_pipeline`) plus a thin
+Celery task wrapper around it.
+
+Two ways this gets called, depending on deployment:
+  - Locally / docker-compose: the API enqueues process_document_pipeline
+    (a real Celery task) and a separate `worker` container picks it up.
+  - Render free tier (no free background-worker service type as of the
+    2026 pricing update): the API calls run_pipeline() directly via
+    FastAPI's BackgroundTasks, in-process, right after the file is saved.
+    No Celery/Redis needed in that mode — see USE_CELERY in config.py.
 """
 from app.celery_app import celery_app
 from app.core.config import settings
@@ -14,14 +21,13 @@ from app.services.db import (
 logger = get_logger(__name__)
 
 
-@celery_app.task(bind=True, max_retries=3, default_retry_delay=30, name="process_document_pipeline")
-def process_document_pipeline(self, document_id: str, file_path: str, filename: str = ""):
+def run_pipeline(document_id: str, file_path: str, filename: str = ""):
     """
     `file_path` here is actually a storage_key (see app/services/storage.py)
     — a local path when STORAGE_BACKEND=local, or "b2:<object-key>" when
-    STORAGE_BACKEND=b2. The API and worker are separate processes/containers
-    in production, so the worker downloads its own local working copy
-    before running OCR, and cleans it up when done.
+    STORAGE_BACKEND=b2. When running as a separate Celery worker container,
+    that container downloads its own local working copy before running OCR,
+    and cleans it up when done.
     """
     log = logger.bind(document_id=document_id)
     local_path = None
@@ -84,7 +90,16 @@ def process_document_pipeline(self, document_id: str, file_path: str, filename: 
     except Exception as exc:
         log.error("pipeline_failed", error=str(exc), exc_info=True)
         update_document_status(document_id, "failed")
-        raise self.retry(exc=exc)
+        raise
     finally:
         if local_path:
             storage.cleanup_local_copy(file_path, local_path)
+
+
+@celery_app.task(bind=True, max_retries=3, default_retry_delay=30, name="process_document_pipeline")
+def process_document_pipeline(self, document_id: str, file_path: str, filename: str = ""):
+    """Celery wrapper — used when USE_CELERY=true (local docker-compose, or a paid Render worker)."""
+    try:
+        run_pipeline(document_id, file_path, filename)
+    except Exception as exc:
+        raise self.retry(exc=exc)

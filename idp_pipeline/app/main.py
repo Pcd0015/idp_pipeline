@@ -15,7 +15,7 @@ Public-deployment hardening applied here:
 import os
 import uuid
 
-from fastapi import FastAPI, UploadFile, File, HTTPException, Header, Request, Depends
+from fastapi import FastAPI, UploadFile, File, HTTPException, Header, Request, Depends, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -25,7 +25,7 @@ from slowapi.errors import RateLimitExceeded
 
 from app.core.config import settings
 from app.core.logging_config import get_logger
-from app.tasks import process_document_pipeline
+from app.tasks import process_document_pipeline, run_pipeline
 from app.schemas.api_schemas import DocumentStatusResponse, DocumentResultResponse, CorrectionRequest
 from app.services.db import get_document_status, get_document_result, save_human_corrections, init_db
 from app.services import storage
@@ -92,7 +92,7 @@ async def health_check():
 
 @app.post("/documents/upload", response_model=DocumentStatusResponse, status_code=202)
 @limiter.limit(settings.rate_limit_uploads)
-async def upload_document(request: Request, file: UploadFile = File(...)):
+async def upload_document(request: Request, background_tasks: BackgroundTasks, file: UploadFile = File(...)):
     ext = os.path.splitext(file.filename)[1].lower()
     if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(400, f"Unsupported file type: {ext}. Allowed: {ALLOWED_EXTENSIONS}")
@@ -106,7 +106,12 @@ async def upload_document(request: Request, file: UploadFile = File(...)):
 
     logger.info("document_uploaded", document_id=document_id, filename=file.filename)
 
-    process_document_pipeline.delay(document_id=document_id, file_path=storage_key, filename=file.filename)
+    if settings.use_celery:
+        process_document_pipeline.delay(document_id=document_id, file_path=storage_key, filename=file.filename)
+    else:
+        # No separate worker available (e.g. Render free tier) — process
+        # right here, after the response, in this same web service.
+        background_tasks.add_task(run_pipeline, document_id, storage_key, file.filename)
 
     return DocumentStatusResponse(document_id=document_id, status="pending")
 

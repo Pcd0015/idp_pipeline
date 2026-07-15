@@ -46,6 +46,12 @@ class Settings(BaseSettings):
     allowed_origins: str = "*"       # comma-separated list, or "*" for dev
     rate_limit_uploads: str = "5/hour"
 
+    # Processing mode: True = enqueue to a separate Celery worker (docker-compose,
+    # or a paid Render worker). False = process in-process via FastAPI
+    # BackgroundTasks, right after upload — used for Render's free tier,
+    # which doesn't include a free background-worker service type.
+    use_celery: bool = True
+
     class Config:
         env_file = ".env"
         case_sensitive = False
