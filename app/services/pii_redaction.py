@@ -10,6 +10,15 @@ was silently OOM-killing the whole process mid-pipeline. Small model is
 slightly less accurate at entity detection but fits comfortably; if you
 deploy somewhere with more RAM, swap "en_core_web_sm" back to "_lg" below
 and in Dockerfile / README.
+
+SCORE_THRESHOLD below is raised above Presidio's default (0.0, i.e. no
+filtering) specifically because the small spaCy model has lower NER
+precision and was observed misclassifying fragments of line-item
+descriptions (e.g. part of "Gas Can (5 feet)") as PERSON entities,
+corrupting line items before they ever reach the LLM. Raising the bar
+trades a little recall on genuinely ambiguous names for far fewer false
+positives on ordinary product text — the right tradeoff for invoice/
+receipt line items, which are mostly non-personal-name text to begin with.
 """
 from presidio_analyzer import AnalyzerEngine
 from presidio_analyzer.nlp_engine import NlpEngineProvider
@@ -19,6 +28,7 @@ _analyzer = None
 _anonymizer = None
 
 PII_ENTITIES = ["PERSON", "EMAIL_ADDRESS", "PHONE_NUMBER", "CREDIT_CARD", "US_SSN", "IBAN_CODE"]
+SCORE_THRESHOLD = 0.6
 
 _NLP_CONFIG = {
     "nlp_engine_name": "spacy",
@@ -47,7 +57,9 @@ def redact(text: str) -> tuple[str, dict]:
         return text, {}
 
     analyzer, anonymizer = _get_engines()
-    results = analyzer.analyze(text=text, entities=PII_ENTITIES, language="en")
+    results = analyzer.analyze(
+        text=text, entities=PII_ENTITIES, language="en", score_threshold=SCORE_THRESHOLD
+    )
     anonymized = anonymizer.anonymize(text=text, analyzer_results=results)
 
     pii_map = {r.entity_type: text[r.start:r.end] for r in results}
