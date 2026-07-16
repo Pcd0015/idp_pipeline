@@ -271,6 +271,10 @@
         <div class="brand-sub">Document intelligence</div>
       </div>
     </div>
+    <div style="display:flex; gap:10px;">
+      <a href="/review" style="font-size:13px; font-weight:600; color:var(--indigo); text-decoration:none;">Review queue</a>
+      <a href="/documents/export?format=csv" style="font-size:13px; font-weight:600; color:var(--ink-soft); text-decoration:none;">Export CSV</a>
+    </div>
   </div>
 </header>
 
@@ -288,10 +292,10 @@
             <path d="M4 15v3a2 2 0 002 2h12a2 2 0 002-2v-3"/>
           </svg>
         </div>
-        <div class="dropzone-title">Drop a file, or click to browse</div>
-        <div class="dropzone-hint">PDF, PNG, JPG, or TIFF</div>
+        <div class="dropzone-title">Drop files, or click to browse</div>
+        <div class="dropzone-hint">PDF, PNG, JPG, or TIFF — multiple at once</div>
       </div>
-      <input type="file" id="fileInput" accept=".pdf,.png,.jpg,.jpeg,.tiff">
+      <input type="file" id="fileInput" accept=".pdf,.png,.jpg,.jpeg,.tiff" multiple>
 
       <div class="queue-heading">Uploads this session</div>
       <div id="queueList"><div class="queue-empty">Nothing uploaded yet</div></div>
@@ -344,10 +348,11 @@ dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
 dropzone.addEventListener('drop', e => {
   e.preventDefault();
   dropzone.classList.remove('drag');
-  if (e.dataTransfer.files.length) uploadFile(e.dataTransfer.files[0]);
+  const files = Array.from(e.dataTransfer.files || []);
+  files.forEach(uploadFile);
 });
 fileInput.addEventListener('change', () => {
-  if (fileInput.files.length) uploadFile(fileInput.files[0]);
+  Array.from(fileInput.files || []).forEach(uploadFile);
   fileInput.value = '';
 });
 
@@ -506,13 +511,33 @@ function renderDetail(id) {
   let bodyHtml = '';
   if (d.result) {
     const fields = d.result.fields || {};
+    const fieldConf = d.result.field_confidence || {};
     const fieldRows = Object.keys(fields).length
-      ? Object.entries(fields).map(([k, v]) => `
-          <tr>
+      ? Object.entries(fields).map(([k, v]) => {
+          const conf = fieldConf[k];
+          const low = conf != null && conf < 0.7;
+          const confBadge = conf != null
+            ? `<span class="mono" style="font-size:10.5px; margin-left:8px; color:${low ? 'var(--red)' : 'var(--ink-faint)'};">${Math.round(conf * 100)}%</span>`
+            : '';
+          return `
+          <tr style="${low ? 'background:var(--red-tint);' : ''}">
             <td class="field-name">${escapeHtml(prettifyKey(k))}</td>
-            <td class="field-value mono">${escapeHtml(String(v ?? '—'))}</td>
-          </tr>`).join('')
+            <td class="field-value mono">${escapeHtml(String(v ?? '—'))}${confBadge}</td>
+          </tr>`;
+        }).join('')
       : `<tr><td colspan="2" style="color:var(--ink-faint); text-align:center; padding:20px;">No fields extracted</td></tr>`;
+
+    const validationErrors = d.result.validation_errors || [];
+    const reviewReasonHtml = validationErrors.length ? `
+      <div class="section-label" style="margin-top:22px;">Why this needs review</div>
+      ${validationErrors.map(err => `
+        <div class="anomaly-box">
+          <div class="anomaly-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9L1.8 18a1.5 1.5 0 001.3 2.3h17.8a1.5 1.5 0 001.3-2.3L13.7 3.9a1.5 1.5 0 00-2.6 0z"/></svg>
+          </div>
+          <div class="anomaly-text">${escapeHtml(err)}</div>
+        </div>`).join('')}
+    ` : '';
 
     const lineItems = d.result.line_items || [];
     const lineItemsHtml = lineItems.length ? `
@@ -553,6 +578,7 @@ function renderDetail(id) {
       <div class="section-label" style="margin-top:22px;">Extracted fields</div>
       <table class="fields-table"><tbody>${fieldRows}</tbody></table>
       ${lineItemsHtml}
+      ${reviewReasonHtml}
       <div class="section-label" style="margin-top:24px;">Validation</div>
       ${anomalyHtml}
     `;

@@ -75,6 +75,7 @@ def get_document_result(document_id: str) -> dict | None:
             return None
 
         fields = {f.field_name: f.field_value for f in doc.fields}
+        field_confidence = {f.field_name: f.confidence for f in doc.fields if f.confidence is not None}
         line_items = [
             {"description": li.description, "quantity": li.quantity,
              "unit_price": li.unit_price, "line_total": li.line_total}
@@ -90,6 +91,8 @@ def get_document_result(document_id: str) -> dict | None:
             "doc_type": doc.doc_type,
             "confidence_score": doc.confidence_score,
             "fields": fields,
+            "field_confidence": field_confidence,
+            "validation_errors": doc.validation_errors or [],
             "line_items": line_items,
             "anomalies": anomalies,
         }
@@ -103,6 +106,7 @@ def save_extracted_fields(document_id: str, validated_result: dict):
         if not doc:
             return
         doc.doc_type = validated_result.get("doc_type")
+        doc.validation_errors = validated_result.get("validation_errors") or []
 
         field_conf = validated_result.get("field_confidence", {})
         skip_keys = {"line_items", "field_confidence", "overall_confidence",
@@ -176,6 +180,54 @@ def save_human_corrections(document_id: str, corrections: dict, reviewer: str = 
         if doc:
             doc.status = "completed"
             doc.processed_at = datetime.utcnow()
+
+
+def list_documents(status: str = None, limit: int = 500) -> list[dict]:
+    """Powers the dashboard, the review queue, and CSV/JSON export. Newest first."""
+    with get_session() as db:
+        q = db.query(Document)
+        if status:
+            q = q.filter(Document.status == status)
+        docs = q.order_by(Document.uploaded_at.desc()).limit(limit).all()
+        return [
+            {
+                "document_id": str(d.id),
+                "filename": d.filename,
+                "status": d.status,
+                "doc_type": d.doc_type,
+                "confidence_score": d.confidence_score,
+                "uploaded_at": d.uploaded_at.isoformat() if d.uploaded_at else None,
+                "processed_at": d.processed_at.isoformat() if d.processed_at else None,
+                "anomaly_count": len(d.anomalies),
+                "validation_errors": d.validation_errors or [],
+            }
+            for d in docs
+        ]
+
+
+def list_documents_for_export(status: str = None) -> list[dict]:
+    """One flattened row per document (fields collapsed into columns) for CSV/JSON export."""
+    with get_session() as db:
+        q = db.query(Document)
+        if status:
+            q = q.filter(Document.status == status)
+        docs = q.order_by(Document.uploaded_at.desc()).all()
+        rows = []
+        for d in docs:
+            row = {
+                "document_id": str(d.id),
+                "filename": d.filename,
+                "status": d.status,
+                "doc_type": d.doc_type,
+                "confidence_score": d.confidence_score,
+                "uploaded_at": d.uploaded_at.isoformat() if d.uploaded_at else None,
+                "processed_at": d.processed_at.isoformat() if d.processed_at else None,
+                "anomaly_types": ";".join(a.anomaly_type for a in d.anomalies),
+            }
+            for f in d.fields:
+                row[f.field_name] = f.field_value
+            rows.append(row)
+        return rows
 
 
 # ---------- Reference data lookups (used by anomaly detection) ----------

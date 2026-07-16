@@ -180,9 +180,33 @@ curl -X POST http://localhost:8000/documents/{document_id}/review \
   -H "X-Admin-Key: your-admin-key" \
   -H "Content-Type: application/json" \
   -d '{"corrections": {"vendor_name": "Correct Vendor Pvt Ltd"}, "reviewer": "you"}'
+
+# List all documents, optionally filtered by status
+curl "http://localhost:8000/documents?status=completed" \
+  -H "X-Admin-Key: your-admin-key"
+
+# Export results as CSV or JSON (one row per document, all fields as columns)
+curl "http://localhost:8000/documents/export?format=csv" \
+  -H "X-Admin-Key: your-admin-key" -o documents_export.csv
 ```
 
 Full interactive docs at `/docs` (Swagger UI) once the service is running.
+
+### Reviewer UI
+
+Open **`/review`** for a real screen for the human-in-the-loop half of the
+pipeline: it lists everything in `needs_review`, shows *why* each doc was
+flagged (validation errors, anomalies, low-confidence fields highlighted in
+red), and lets you edit/confirm fields inline — no `curl` required. Paste
+your `X-Admin-Key` at the top if you've set one.
+
+### Optional webhook notifications
+
+Set `WEBHOOK_URL` in your environment to get pinged (via a plain POST) when
+a document finishes processing. Works with anything that accepts a JSON
+payload for free — a Slack "Incoming Webhook" URL, a Discord channel
+webhook, a Zapier "Catch Webhook" trigger. No code required beyond pasting
+the URL; leave it blank to disable (default, no cost either way).
 
 ---
 
@@ -216,6 +240,8 @@ Being upfront about what's not production-hardened yet:
 - **`_get_historical_unit_price`** in `anomaly_detection.py` is a stub — needs a rolling-average query once there's real historical line-item data.
 - **Multi-page PDFs** aren't rasterized in `preprocessing.py` — add `pdf2image` for multi-page support.
 - **Free-tier cold starts** — first request after 15 minutes idle takes 30-60 seconds.
+- **Schema change**: this update adds a `validation_errors` column to `documents`. `init_db()` only creates *missing* tables (`create_all`), it won't alter an existing one — if you already have a deployed database, either drop/recreate it (fine for a demo dataset) or add the column manually: `ALTER TABLE documents ADD COLUMN validation_errors JSON;` (Postgres) — adjust the type for other databases. A fresh database (e.g. a brand-new Neon project) needs nothing extra.
+- **Accounting software / QuickBooks / Xero, email ingestion, real Slack app integration, real user accounts (OAuth), signed upload URLs, and a real cloud OCR provider (Textract/Document AI)** are intentionally not included here — each of those needs *you* to create your own account and paste in your own credentials (even the free tiers require a signup), so they can't be wired in blindly. The webhook support above covers Slack/Discord notifications generically without needing a registered Slack app. If you want any of these built out with your own API keys, ask and it'll be added the same way as everything else here.
 
 ## Sample Data
 
@@ -244,10 +270,12 @@ app/
 │   ├── validation.py        # schema + business-rule validation, confidence scoring
 │   ├── anomaly_detection.py # PO mismatch / duplicate / price-deviation checks
 │   ├── storage.py           # local disk / Backblaze B2 abstraction
+│   ├── notify.py            # optional outbound webhook notifications
 │   └── db.py                # DB session + query helpers
 ├── models/db_models.py     # SQLAlchemy ORM models
 ├── schemas/api_schemas.py  # Pydantic request/response models
-├── static/index.html       # Dashboard UI
+├── static/index.html       # Upload dashboard UI
+├── static/review.html      # Human-in-the-loop review UI
 └── core/                   # config + logging
 tests/
 ```
