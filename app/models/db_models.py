@@ -26,7 +26,6 @@ class Document(Base):
     processed_at = Column(DateTime, nullable=True)
     confidence_score = Column(Float, nullable=True)
     retry_count = Column(Integer, default=0)
-    validation_errors = Column(JSON, nullable=True)  # list[str] — why this doc needs review
 
     fields = relationship("ExtractedField", back_populates="document", cascade="all, delete-orphan")
     line_items = relationship("LineItem", back_populates="document", cascade="all, delete-orphan")

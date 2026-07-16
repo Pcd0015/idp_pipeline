@@ -30,8 +30,6 @@ class DocumentResultResponse(BaseModel):
     doc_type: Optional[str] = None
     confidence_score: Optional[float] = None
     fields: dict
-    field_confidence: dict = {}
-    validation_errors: list[str] = []
     line_items: list[LineItemSchema]
     anomalies: list[AnomalySchema]
 
@@ -39,15 +37,3 @@ class DocumentResultResponse(BaseModel):
 class CorrectionRequest(BaseModel):
     corrections: dict[str, str]
     reviewer: Optional[str] = "unknown"
-
-
-class DocumentListItem(BaseModel):
-    document_id: str
-    filename: str
-    status: str
-    doc_type: Optional[str] = None
-    confidence_score: Optional[float] = None
-    uploaded_at: Optional[str] = None
-    processed_at: Optional[str] = None
-    anomaly_count: int = 0
-    validation_errors: list[str] = []

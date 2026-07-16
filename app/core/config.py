@@ -48,13 +48,6 @@ class Settings(BaseSettings):
     allowed_origins: str = "*"       # comma-separated list, or "*" for dev
     rate_limit_uploads: str = "5/hour"
 
-    # Optional: POST a JSON payload here whenever a document finishes
-    # processing (completed / needs_review / failed). Works with any free
-    # webhook receiver — a Slack "Incoming Webhook" URL, a Discord channel
-    # webhook, Zapier's Catch Webhook trigger, etc. Leave blank to disable
-    # (default) — no cost, no signup required either way.
-    webhook_url: str = ""
-
     # Processing mode: True = enqueue to a separate Celery worker (docker-compose,
     # or a paid Render worker). False = process in-process via FastAPI
     # BackgroundTasks, right after upload — used for Render's free tier,

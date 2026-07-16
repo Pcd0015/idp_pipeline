@@ -18,7 +18,7 @@ import uuid
 from fastapi import FastAPI, UploadFile, File, HTTPException, Header, Request, Depends, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -27,10 +27,7 @@ from app.core.config import settings
 from app.core.logging_config import get_logger
 from app.tasks import process_document_pipeline, run_pipeline
 from app.schemas.api_schemas import DocumentStatusResponse, DocumentResultResponse, CorrectionRequest
-from app.services.db import (
-    get_document_status, get_document_result, save_human_corrections, init_db,
-    list_documents, list_documents_for_export,
-)
+from app.services.db import get_document_status, get_document_result, save_human_corrections, init_db
 from app.services import storage
 
 logger = get_logger(__name__)
@@ -155,55 +152,17 @@ async def submit_correction(document_id: str, payload: CorrectionRequest):
 @app.get("/documents/review-queue", dependencies=[Depends(require_admin)])
 async def get_review_queue():
     """Lists documents currently awaiting human review — powers the review UI. Requires X-Admin-Key."""
-    return list_documents(status="needs_review")
+    from app.services.db import get_session
+    from app.models.db_models import Document
 
-
-@app.get("/documents", dependencies=[Depends(require_admin)])
-async def list_all_documents(status: str = None, limit: int = 500):
-    """
-    Lists documents (optionally filtered by status), newest first. Powers the
-    dashboard / export tooling. Requires X-Admin-Key once ADMIN_API_KEY is set.
-    """
-    return list_documents(status=status, limit=limit)
-
-
-@app.get("/documents/export", dependencies=[Depends(require_admin)])
-async def export_documents(format: str = "json", status: str = None):
-    """
-    Download extraction results as CSV or JSON — one row per document, with
-    every extracted field as its own column. Handy for dropping straight into
-    a spreadsheet. `?status=completed` (or `needs_review`, `failed`) filters;
-    omit it to export everything. Requires X-Admin-Key once ADMIN_API_KEY is set.
-    """
-    rows = list_documents_for_export(status=status)
-
-    if format == "csv":
-        import csv
-        import io
-        buffer = io.StringIO()
-        fieldnames: list[str] = []
-        for row in rows:
-            for key in row.keys():
-                if key not in fieldnames:
-                    fieldnames.append(key)
-        writer = csv.DictWriter(buffer, fieldnames=fieldnames or ["document_id"])
-        writer.writeheader()
-        writer.writerows(rows)
-        return Response(
-            content=buffer.getvalue(),
-            media_type="text/csv",
-            headers={"Content-Disposition": "attachment; filename=documents_export.csv"},
-        )
-
-    if format != "json":
-        raise HTTPException(400, "format must be 'json' or 'csv'")
-    return rows
-
-
-@app.get("/review")
-async def review_page():
-    """Serves the reviewer UI for the needs_review queue."""
-    review_path = os.path.join(STATIC_DIR, "review.html")
-    if os.path.exists(review_path):
-        return FileResponse(review_path)
-    return {"message": "Review UI not found. See /documents/review-queue for the raw API."}
+    with get_session() as db:
+        docs = db.query(Document).filter(Document.status == "needs_review").all()
+        return [
+            {
+                "document_id": str(d.id),
+                "filename": d.filename,
+                "confidence_score": d.confidence_score,
+                "uploaded_at": d.uploaded_at.isoformat() if d.uploaded_at else None,
+            }
+            for d in docs
+        ]
