@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IDP Review Queue</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #0F172A; --ink-soft: #475569; --ink-faint: #94A3B8;
+    --page: #F8FAFC; --card: #FFFFFF; --border: #E2E8F0; --border-soft: #EEF2F7;
+    --indigo: #4F46E5; --indigo-tint: #EEF2FF;
+    --emerald: #059669; --emerald-tint: #ECFDF5;
+    --amber: #D97706; --amber-tint: #FFFBEB;
+    --red: #DC2626; --red-tint: #FEF2F2;
+    --slate: #64748B; --slate-tint: #F1F5F9;
+    --radius-lg: 16px; --radius-md: 10px; --radius-sm: 7px;
+    --shadow-sm: 0 1px 2px rgba(15,23,42,.04), 0 1px 3px rgba(15,23,42,.03);
+    color-scheme: light;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:'Inter',-apple-system,sans-serif; background:var(--page); color:var(--ink); min-height:100vh; }
+  .mono { font-family:'IBM Plex Mono', ui-monospace, monospace; }
+  header { position:sticky; top:0; z-index:40; background:rgba(248,250,252,.85); backdrop-filter:blur(10px); border-bottom:1px solid var(--border); }
+  .header-inner { max-width:1080px; margin:0 auto; padding:16px 24px; display:flex; align-items:center; justify-content:space-between; }
+  .brand-name { font-weight:700; font-size:15px; }
+  .brand-sub { font-size:12px; color:var(--ink-faint); }
+  main { max-width:1080px; margin:0 auto; padding:32px 24px 80px; }
+  h1 { font-size:22px; font-weight:700; margin:0 0 4px; }
+  p.sub { color:var(--ink-soft); font-size:14px; margin:0 0 24px; }
+  .grid { display:grid; grid-template-columns:340px 1fr; gap:24px; align-items:start; }
+  @media (max-width:860px) { .grid { grid-template-columns:1fr; } }
+  .card { background:var(--card); border:1px solid var(--border); border-radius:var(--radius-lg); box-shadow:var(--shadow-sm); }
+  .card-pad { padding:20px; }
+  .key-row { display:flex; gap:8px; margin-bottom:18px; }
+  .key-row input { flex:1; padding:9px 11px; border:1px solid var(--border); border-radius:var(--radius-sm); font-size:13px; }
+  .key-row button, .btn { padding:9px 14px; border-radius:var(--radius-sm); border:none; background:var(--indigo); color:#fff; font-weight:600; font-size:13px; cursor:pointer; }
+  .btn.secondary { background:var(--slate-tint); color:var(--ink); }
+  .queue-item { padding:12px 10px; border-radius:var(--radius-sm); cursor:pointer; border:1px solid transparent; }
+  .queue-item:hover { background:var(--slate-tint); }
+  .queue-item.active { background:var(--indigo-tint); border-color:#C7D2FE; }
+  .queue-item-name { font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .queue-item-meta { font-size:11.5px; color:var(--ink-faint); margin-top:2px; }
+  .queue-empty { font-size:13px; color:var(--ink-faint); padding:18px 4px; text-align:center; }
+  .badge { display:inline-flex; align-items:center; font-size:11px; font-weight:600; padding:3px 9px; border-radius:999px; }
+  .field-row { display:flex; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid var(--border-soft); }
+  .field-label { width:150px; flex-shrink:0; font-size:12.5px; color:var(--ink-soft); }
+  .field-input { flex:1; padding:8px 10px; border:1px solid var(--border); border-radius:var(--radius-sm); font-size:13px; }
+  .field-input.low { border-color:var(--red); background:var(--red-tint); }
+  .section-label { font-size:11.5px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-faint); margin:0 0 10px; }
+  .reason-box { background:var(--amber-tint); border:1px solid #FDE8C8; border-radius:var(--radius-md); padding:10px 14px; font-size:13px; color:#92400E; margin-bottom:6px; }
+  .empty-state { padding:80px 20px; text-align:center; color:var(--ink-faint); }
+  #toasts { position:fixed; bottom:22px; right:22px; z-index:100; display:flex; flex-direction:column; gap:10px; }
+  .toast { background:var(--ink); color:#fff; padding:12px 16px; border-radius:var(--radius-md); font-size:13px; }
+  .toast.error { background:var(--red); } .toast.success { background:var(--emerald); }
+</style>
+</head>
+<body>
+<header>
+  <div class="header-inner">
+    <div><div class="brand-name">Review queue</div><div class="brand-sub">Documents flagged for human review</div></div>
+    <a href="/" style="font-size:13px; font-weight:600; color:var(--indigo); text-decoration:none;">&larr; Upload dashboard</a>
+  </div>
+</header>
+<main>
+  <div class="key-row">
+    <input type="text" id="adminKey" placeholder="X-Admin-Key (leave blank if not set on the server)">
+    <button onclick="saveKeyAndReload()">Load queue</button>
+  </div>
+
+  <div class="grid">
+    <div class="card card-pad">
+      <div class="section-label">Needs review</div>
+      <div id="queueList"><div class="queue-empty">Enter your admin key and click Load queue</div></div>
+    </div>
+    <div class="card card-pad" id="detailPanel">
+      <div class="empty-state">Select a document from the queue</div>
+    </div>
+  </div>
+</main>
+<div id="toasts"></div>
+<script>
+const queueList = document.getElementById('queueList');
+const detailPanel = document.getElementById('detailPanel');
+const adminKeyInput = document.getElementById('adminKey');
+const toasts = document.getElementById('toasts');
+let queue = [];
+let activeId = null;
+
+adminKeyInput.value = localStorage.getItem('idp_admin_key') || '';
+
+function toast(msg, kind) {
+  const el = document.createElement('div');
+  el.className = 'toast' + (kind ? ' ' + kind : '');
+  el.textContent = msg;
+  toasts.appendChild(el);
+  setTimeout(() => el.remove(), 3500);
+}
+function headers() {
+  const key = adminKeyInput.value.trim();
+  return key ? { 'X-Admin-Key': key } : {};
+}
+function saveKeyAndReload() {
+  localStorage.setItem('idp_admin_key', adminKeyInput.value.trim());
+  loadQueue();
+}
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+function prettifyKey(k) { return k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()); }
+
+async function loadQueue() {
+  queueList.innerHTML = '<div class="queue-empty">Loading…</div>';
+  try {
+    const res = await fetch('/documents/review-queue', { headers: headers() });
+    if (res.status === 401) {
+      queueList.innerHTML = '<div class="queue-empty">Invalid admin key</div>';
+      return;
+    }
+    queue = await res.json();
+    renderQueue();
+  } catch (e) {
+    queueList.innerHTML = '<div class="queue-empty">Could not load queue</div>';
+  }
+}
+
+function renderQueue() {
+  if (!queue.length) {
+    queueList.innerHTML = '<div class="queue-empty">Nothing needs review right now 🎉</div>';
+    return;
+  }
+  queueList.innerHTML = queue.map(d => `
+    <div class="queue-item ${d.document_id === activeId ? 'active' : ''}" onclick="selectDoc('${d.document_id}')">
+      <div class="queue-item-name">${escapeHtml(d.filename)}</div>
+      <div class="queue-item-meta">${d.confidence_score != null ? Math.round(d.confidence_score * 100) + '% confidence' : ''} ${d.anomaly_count ? '· ' + d.anomaly_count + ' anomaly' : ''}</div>
+    </div>`).join('');
+}
+
+async function selectDoc(id) {
+  activeId = id;
+  renderQueue();
+  detailPanel.innerHTML = '<div class="empty-state">Loading…</div>';
+  try {
+    const res = await fetch(`/documents/${id}/result`);
+    if (!res.ok) { detailPanel.innerHTML = '<div class="empty-state">Could not load this document</div>'; return; }
+    const result = await res.json();
+    renderDetail(id, result);
+  } catch (e) {
+    detailPanel.innerHTML = '<div class="empty-state">Could not load this document</div>';
+  }
+}
+
+function renderDetail(id, result) {
+  const fields = result.fields || {};
+  const fieldConf = result.field_confidence || {};
+  const validationErrors = result.validation_errors || [];
+  const anomalies = result.anomalies || [];
+
+  const reasonsHtml = [
+    ...validationErrors.map(e => `<div class="reason-box">${escapeHtml(e)}</div>`),
+    ...anomalies.map(a => `<div class="reason-box">${escapeHtml(prettifyKey(a.type))} (${escapeHtml(a.severity)})</div>`),
+  ].join('') || '<div class="reason-box">Flagged by a low overall confidence score.</div>';
+
+  const rowsHtml = Object.entries(fields).map(([k, v]) => {
+    const conf = fieldConf[k];
+    const low = conf != null && conf < 0.7;
+    return `
+      <div class="field-row">
+        <div class="field-label">${escapeHtml(prettifyKey(k))}${conf != null ? ` <span class="mono" style="color:${low ? 'var(--red)' : 'var(--ink-faint)'};">(${Math.round(conf*100)}%)</span>` : ''}</div>
+        <input class="field-input ${low ? 'low' : ''}" data-field="${escapeHtml(k)}" value="${escapeHtml(String(v ?? ''))}">
+      </div>`;
+  }).join('') || '<div style="color:var(--ink-faint); font-size:13px;">No fields extracted for this document.</div>';
+
+  detailPanel.innerHTML = `
+    <div class="section-label">Why this needs review</div>
+    ${reasonsHtml}
+    <div class="section-label" style="margin-top:20px;">Extracted fields — edit and confirm</div>
+    <div id="fieldForm">${rowsHtml}</div>
+    <div style="margin-top:18px; display:flex; gap:10px;">
+      <button class="btn" onclick="submitCorrections('${id}')">Confirm &amp; save</button>
+    </div>
+  `;
+}
+
+async function submitCorrections(id) {
+  const inputs = detailPanel.querySelectorAll('.field-input');
+  const corrections = {};
+  inputs.forEach(inp => { corrections[inp.dataset.field] = inp.value; });
+
+  try {
+    const res = await fetch(`/documents/${id}/review`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...headers() },
+      body: JSON.stringify({ corrections, reviewer: 'reviewer' }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      toast(err.detail || 'Failed to save corrections', 'error');
+      return;
+    }
+    toast('Corrections saved — document marked completed', 'success');
+    queue = queue.filter(d => d.document_id !== id);
+    activeId = null;
+    renderQueue();
+    detailPanel.innerHTML = '<div class="empty-state">Select a document from the queue</div>';
+  } catch (e) {
+    toast('Network error while saving', 'error');
+  }
+}
+
+if (adminKeyInput.value) loadQueue();
+</script>
+</body>
+</html>

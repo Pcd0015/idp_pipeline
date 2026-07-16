@@ -13,7 +13,7 @@ Two ways this gets called, depending on deployment:
 from app.celery_app import celery_app
 from app.core.config import settings
 from app.core.logging_config import get_logger
-from app.services import preprocessing, ocr, pii_redaction, llm_extraction, validation, anomaly_detection, storage
+from app.services import preprocessing, ocr, pii_redaction, llm_extraction, validation, anomaly_detection, storage, notify
 from app.services.db import (
     create_document_record, update_document_status, save_extracted_fields, save_anomalies
 )
@@ -83,13 +83,16 @@ def run_pipeline(document_id: str, file_path: str, filename: str = ""):
         if overall_confidence < settings.confidence_threshold or anomalies:
             update_document_status(document_id, "needs_review", confidence=overall_confidence)
             log.info("routed_to_human_review", confidence=overall_confidence)
+            notify.notify_status_change(document_id, filename, "needs_review", overall_confidence)
         else:
             update_document_status(document_id, "completed", confidence=overall_confidence)
             log.info("pipeline_completed", confidence=overall_confidence)
+            notify.notify_status_change(document_id, filename, "completed", overall_confidence)
 
     except Exception as exc:
         log.error("pipeline_failed", error=str(exc), exc_info=True)
         update_document_status(document_id, "failed")
+        notify.notify_status_change(document_id, filename, "failed")
         raise
     finally:
         if local_path:

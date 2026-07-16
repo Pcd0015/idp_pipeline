@@ -117,6 +117,58 @@
   .dropzone-hint { font-size: 12.5px; color: var(--ink-faint); margin-top: 5px; }
   input[type=file] { display: none; }
 
+  .camera-btn {
+    width: 100%; margin-top: 10px;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    padding: 10px; border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    background: var(--card); color: var(--ink-soft);
+    font-family: inherit; font-size: 13px; font-weight: 600;
+    cursor: pointer; transition: background .12s ease, border-color .12s ease;
+  }
+  .camera-btn:hover { background: var(--slate-tint); border-color: #CBD5E1; }
+
+  /* ---------- Camera capture modal ---------- */
+  .camera-modal {
+    display: none;
+    position: fixed; inset: 0; z-index: 200;
+    background: rgba(15,23,42,.55);
+    align-items: center; justify-content: center;
+    padding: 20px;
+  }
+  .camera-modal.open { display: flex; }
+  .camera-modal-inner {
+    background: var(--card); border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg); width: 100%; max-width: 480px;
+    overflow: hidden;
+  }
+  .camera-modal-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 18px; border-bottom: 1px solid var(--border-soft);
+    font-weight: 600; font-size: 14px;
+  }
+  .camera-close {
+    border: none; background: none; font-size: 20px; line-height: 1;
+    color: var(--ink-faint); cursor: pointer; padding: 2px 6px;
+  }
+  .camera-viewport {
+    background: #000; aspect-ratio: 4 / 3;
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden;
+  }
+  .camera-viewport video, .camera-viewport img {
+    width: 100%; height: 100%; object-fit: contain;
+  }
+  .camera-modal-actions {
+    display: flex; gap: 10px; padding: 14px 18px;
+  }
+  .camera-modal-actions .btn {
+    flex: 1; padding: 10px; border-radius: var(--radius-md); border: none;
+    font-weight: 600; font-size: 13px; cursor: pointer; font-family: inherit;
+  }
+  .camera-modal-actions .btn.primary { background: var(--indigo); color: #fff; }
+  .camera-modal-actions .btn.secondary { background: var(--slate-tint); color: var(--ink); }
+
   /* ---------- Queue list ---------- */
   .queue-heading {
     font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em;
@@ -271,6 +323,10 @@
         <div class="brand-sub">Document intelligence</div>
       </div>
     </div>
+    <div style="display:flex; gap:10px;">
+      <a href="/review" style="font-size:13px; font-weight:600; color:var(--indigo); text-decoration:none;">Review queue</a>
+      <a href="/documents/export?format=csv" style="font-size:13px; font-weight:600; color:var(--ink-soft); text-decoration:none;">Export CSV</a>
+    </div>
   </div>
 </header>
 
@@ -288,10 +344,20 @@
             <path d="M4 15v3a2 2 0 002 2h12a2 2 0 002-2v-3"/>
           </svg>
         </div>
-        <div class="dropzone-title">Drop a file, or click to browse</div>
-        <div class="dropzone-hint">PDF, PNG, JPG, or TIFF</div>
+        <div class="dropzone-title">Drop files, or click to browse</div>
+        <div class="dropzone-hint">PDF, PNG, JPG, or TIFF — multiple at once</div>
       </div>
-      <input type="file" id="fileInput" accept=".pdf,.png,.jpg,.jpeg,.tiff">
+      <input type="file" id="fileInput" accept=".pdf,.png,.jpg,.jpeg,.tiff" multiple>
+
+      <button type="button" id="cameraBtn" class="camera-btn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/>
+          <circle cx="12" cy="13" r="4"/>
+        </svg>
+        Take photo
+      </button>
+      <!-- Fallback input: on phones without getUserMedia support this still opens the native camera app directly. -->
+      <input type="file" id="cameraFallbackInput" accept="image/*" capture="environment" style="display:none;">
 
       <div class="queue-heading">Uploads this session</div>
       <div id="queueList"><div class="queue-empty">Nothing uploaded yet</div></div>
@@ -312,6 +378,25 @@
     </div>
   </div>
 </main>
+
+<div id="cameraModal" class="camera-modal">
+  <div class="camera-modal-inner">
+    <div class="camera-modal-header">
+      <span>Take a photo</span>
+      <button type="button" class="camera-close" onclick="closeCamera()">&times;</button>
+    </div>
+    <div class="camera-viewport">
+      <video id="cameraVideo" autoplay playsinline></video>
+      <img id="cameraPreview" style="display:none;">
+    </div>
+    <canvas id="cameraCanvas" style="display:none;"></canvas>
+    <div class="camera-modal-actions">
+      <button type="button" class="btn secondary" id="cameraRetakeBtn" style="display:none;" onclick="retakePhoto()">Retake</button>
+      <button type="button" class="btn primary" id="cameraCaptureBtn" onclick="capturePhoto()">Capture</button>
+      <button type="button" class="btn primary" id="cameraUseBtn" style="display:none;" onclick="useCapturedPhoto()">Use this photo</button>
+    </div>
+  </div>
+</div>
 
 <div id="toasts"></div>
 
@@ -344,12 +429,107 @@ dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
 dropzone.addEventListener('drop', e => {
   e.preventDefault();
   dropzone.classList.remove('drag');
-  if (e.dataTransfer.files.length) uploadFile(e.dataTransfer.files[0]);
+  const files = Array.from(e.dataTransfer.files || []);
+  files.forEach(uploadFile);
 });
 fileInput.addEventListener('change', () => {
-  if (fileInput.files.length) uploadFile(fileInput.files[0]);
+  Array.from(fileInput.files || []).forEach(uploadFile);
   fileInput.value = '';
 });
+
+// ---------- Camera capture ----------
+const cameraBtn = document.getElementById('cameraBtn');
+const cameraFallbackInput = document.getElementById('cameraFallbackInput');
+const cameraModal = document.getElementById('cameraModal');
+const cameraVideo = document.getElementById('cameraVideo');
+const cameraPreview = document.getElementById('cameraPreview');
+const cameraCanvas = document.getElementById('cameraCanvas');
+const cameraCaptureBtn = document.getElementById('cameraCaptureBtn');
+const cameraRetakeBtn = document.getElementById('cameraRetakeBtn');
+const cameraUseBtn = document.getElementById('cameraUseBtn');
+const MAX_CAPTURE_DIMENSION = 1800; // caps huge phone-camera photos so OCR/preprocessing stays fast
+let cameraStream = null;
+let capturedBlob = null;
+
+cameraBtn.addEventListener('click', async () => {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    // No live-preview support (older browser) — fall back to the native camera app via <input capture>.
+    cameraFallbackInput.click();
+    return;
+  }
+  try {
+    cameraStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment' },
+      audio: false,
+    });
+    cameraVideo.srcObject = cameraStream;
+    cameraModal.classList.add('open');
+    resetCameraModal();
+  } catch (e) {
+    // Permission denied, no camera, or insecure context — fall back to the native picker.
+    toast('Could not access camera — using device camera app instead', 'default');
+    cameraFallbackInput.click();
+  }
+});
+
+cameraFallbackInput.addEventListener('change', () => {
+  if (cameraFallbackInput.files.length) uploadFile(cameraFallbackInput.files[0]);
+  cameraFallbackInput.value = '';
+});
+
+function resetCameraModal() {
+  cameraVideo.style.display = 'block';
+  cameraPreview.style.display = 'none';
+  cameraCaptureBtn.style.display = 'block';
+  cameraRetakeBtn.style.display = 'none';
+  cameraUseBtn.style.display = 'none';
+  capturedBlob = null;
+}
+
+function closeCamera() {
+  cameraModal.classList.remove('open');
+  if (cameraStream) {
+    cameraStream.getTracks().forEach(t => t.stop());
+    cameraStream = null;
+  }
+  resetCameraModal();
+}
+
+function capturePhoto() {
+  const track = cameraStream && cameraStream.getVideoTracks()[0];
+  const settings = track ? track.getSettings() : {};
+  const srcW = settings.width || cameraVideo.videoWidth;
+  const srcH = settings.height || cameraVideo.videoHeight;
+
+  const scale = Math.min(1, MAX_CAPTURE_DIMENSION / Math.max(srcW, srcH));
+  const outW = Math.round(srcW * scale);
+  const outH = Math.round(srcH * scale);
+
+  cameraCanvas.width = outW;
+  cameraCanvas.height = outH;
+  cameraCanvas.getContext('2d').drawImage(cameraVideo, 0, 0, outW, outH);
+
+  cameraCanvas.toBlob(blob => {
+    capturedBlob = blob;
+    cameraPreview.src = URL.createObjectURL(blob);
+    cameraVideo.style.display = 'none';
+    cameraPreview.style.display = 'block';
+    cameraCaptureBtn.style.display = 'none';
+    cameraRetakeBtn.style.display = 'block';
+    cameraUseBtn.style.display = 'block';
+  }, 'image/jpeg', 0.9);
+}
+
+function retakePhoto() {
+  resetCameraModal();
+}
+
+function useCapturedPhoto() {
+  if (!capturedBlob) return;
+  const file = new File([capturedBlob], `capture-${Date.now()}.jpg`, { type: 'image/jpeg' });
+  closeCamera();
+  uploadFile(file);
+}
 
 async function uploadFile(file) {
   const formData = new FormData();
@@ -506,13 +686,33 @@ function renderDetail(id) {
   let bodyHtml = '';
   if (d.result) {
     const fields = d.result.fields || {};
+    const fieldConf = d.result.field_confidence || {};
     const fieldRows = Object.keys(fields).length
-      ? Object.entries(fields).map(([k, v]) => `
-          <tr>
+      ? Object.entries(fields).map(([k, v]) => {
+          const conf = fieldConf[k];
+          const low = conf != null && conf < 0.7;
+          const confBadge = conf != null
+            ? `<span class="mono" style="font-size:10.5px; margin-left:8px; color:${low ? 'var(--red)' : 'var(--ink-faint)'};">${Math.round(conf * 100)}%</span>`
+            : '';
+          return `
+          <tr style="${low ? 'background:var(--red-tint);' : ''}">
             <td class="field-name">${escapeHtml(prettifyKey(k))}</td>
-            <td class="field-value mono">${escapeHtml(String(v ?? '—'))}</td>
-          </tr>`).join('')
+            <td class="field-value mono">${escapeHtml(String(v ?? '—'))}${confBadge}</td>
+          </tr>`;
+        }).join('')
       : `<tr><td colspan="2" style="color:var(--ink-faint); text-align:center; padding:20px;">No fields extracted</td></tr>`;
+
+    const validationErrors = d.result.validation_errors || [];
+    const reviewReasonHtml = validationErrors.length ? `
+      <div class="section-label" style="margin-top:22px;">Why this needs review</div>
+      ${validationErrors.map(err => `
+        <div class="anomaly-box">
+          <div class="anomaly-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9L1.8 18a1.5 1.5 0 001.3 2.3h17.8a1.5 1.5 0 001.3-2.3L13.7 3.9a1.5 1.5 0 00-2.6 0z"/></svg>
+          </div>
+          <div class="anomaly-text">${escapeHtml(err)}</div>
+        </div>`).join('')}
+    ` : '';
 
     const lineItems = d.result.line_items || [];
     const lineItemsHtml = lineItems.length ? `
@@ -553,6 +753,7 @@ function renderDetail(id) {
       <div class="section-label" style="margin-top:22px;">Extracted fields</div>
       <table class="fields-table"><tbody>${fieldRows}</tbody></table>
       ${lineItemsHtml}
+      ${reviewReasonHtml}
       <div class="section-label" style="margin-top:24px;">Validation</div>
       ${anomalyHtml}
     `;
