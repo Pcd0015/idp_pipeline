@@ -3,64 +3,341 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Bill Upload — IDP Pipeline</title>
+<title>IDP Dashboard — Document Processing</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-  :root { color-scheme: light; }
+  :root {
+    --ink: #0F172A;
+    --ink-soft: #475569;
+    --ink-faint: #94A3B8;
+    --page: #F8FAFC;
+    --card: #FFFFFF;
+    --border: #E2E8F0;
+    --border-soft: #EEF2F7;
+    --indigo: #4F46E5;
+    --indigo-dark: #4338CA;
+    --indigo-tint: #EEF2FF;
+    --emerald: #059669;
+    --emerald-tint: #ECFDF5;
+    --amber: #D97706;
+    --amber-tint: #FFFBEB;
+    --red: #DC2626;
+    --red-tint: #FEF2F2;
+    --slate: #64748B;
+    --slate-tint: #F1F5F9;
+    --radius-lg: 16px;
+    --radius-md: 10px;
+    --radius-sm: 7px;
+    --shadow-sm: 0 1px 2px rgba(15,23,42,.04), 0 1px 3px rgba(15,23,42,.03);
+    --shadow-md: 0 4px 12px rgba(15,23,42,.06), 0 2px 4px rgba(15,23,42,.04);
+    --shadow-lg: 0 12px 32px rgba(15,23,42,.10), 0 4px 10px rgba(15,23,42,.05);
+    color-scheme: light;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
   body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    background: #f5f5f7; margin: 0; padding: 40px 20px;
-    display: flex; flex-direction: column; align-items: center;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--page);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
   }
-  h1 { font-size: 22px; color: #1d1d1f; margin-bottom: 4px; }
-  p.sub { color: #6e6e73; margin-top: 0; margin-bottom: 28px; }
-  .dropzone {
-    width: 100%; max-width: 480px; min-height: 180px;
-    border: 2px dashed #b0b0b6; border-radius: 14px;
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    background: #fff; cursor: pointer; transition: border-color .15s, background .15s;
-    padding: 24px; text-align: center;
+  .mono { font-family: 'IBM Plex Mono', ui-monospace, monospace; }
+
+  /* ---------- Header ---------- */
+  header {
+    position: sticky; top: 0; z-index: 40;
+    background: rgba(248,250,252,.85);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border);
   }
-  .dropzone.drag { border-color: #0071e3; background: #f0f7ff; }
-  .dropzone svg { margin-bottom: 10px; }
-  .dropzone .hint { color: #6e6e73; font-size: 13px; margin-top: 6px; }
-  input[type=file] { display: none; }
-  .results { width: 100%; max-width: 480px; margin-top: 22px; }
+  .header-inner {
+    max-width: 1080px; margin: 0 auto;
+    padding: 16px 24px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand-mark {
+    width: 32px; height: 32px; border-radius: 9px;
+    background: linear-gradient(135deg, var(--indigo), #6366F1);
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: var(--shadow-sm);
+  }
+  .brand-name { font-weight: 700; font-size: 15px; letter-spacing: -0.01em; }
+  .brand-sub { font-size: 12px; color: var(--ink-faint); font-weight: 500; }
+
+  /* ---------- Layout ---------- */
+  main {
+    max-width: 1080px; margin: 0 auto;
+    padding: 40px 24px 80px;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: 380px 1fr;
+    gap: 24px;
+    align-items: start;
+  }
+  @media (max-width: 860px) {
+    .grid { grid-template-columns: 1fr; }
+  }
   .card {
-    background: #fff; border-radius: 12px; padding: 16px 18px;
-    margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
   }
-  .card .name { font-weight: 600; font-size: 14px; color: #1d1d1f; }
-  .card .status { font-size: 13px; margin-top: 4px; }
-  .status.pending, .status.processing { color: #b06a00; }
-  .status.completed { color: #1a7f37; }
-  .status.needs_review { color: #b0332f; }
-  .status.failed { color: #b0332f; }
-  .error { color: #b0332f; font-size: 13px; margin-top: 10px; }
+  .card-pad { padding: 22px; }
+  h1.page-title { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; margin: 0 0 4px; }
+  p.page-sub { color: var(--ink-soft); font-size: 14px; margin: 0 0 28px; }
+
+  /* ---------- Dropzone ---------- */
+  .dropzone {
+    border: 1.5px dashed #CBD5E1;
+    border-radius: var(--radius-md);
+    padding: 32px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .18s ease, background .18s ease, transform .12s ease;
+    background: #FCFDFE;
+  }
+  .dropzone:hover { border-color: #A5B4FC; background: var(--indigo-tint); }
+  .dropzone.drag {
+    border-color: var(--indigo);
+    background: var(--indigo-tint);
+    transform: scale(1.01);
+  }
+  .dropzone-icon {
+    width: 46px; height: 46px; margin: 0 auto 14px;
+    border-radius: 12px;
+    background: var(--indigo-tint);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .dropzone-title { font-weight: 600; font-size: 14px; color: var(--ink); }
+  .dropzone-hint { font-size: 12.5px; color: var(--ink-faint); margin-top: 5px; }
+  input[type=file] { display: none; }
+
+  /* ---------- Queue list ---------- */
+  .queue-heading {
+    font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--ink-faint); margin: 26px 0 10px;
+  }
+  .queue-empty {
+    font-size: 13px; color: var(--ink-faint);
+    padding: 18px 4px; text-align: center;
+  }
+  .queue-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 11px 10px; border-radius: var(--radius-sm);
+    cursor: pointer; transition: background .12s ease;
+    border: 1px solid transparent;
+  }
+  .queue-item:hover { background: var(--slate-tint); }
+  .queue-item.active { background: var(--indigo-tint); border-color: #C7D2FE; }
+  .queue-item-icon {
+    width: 30px; height: 30px; border-radius: 8px; flex-shrink: 0;
+    background: var(--slate-tint);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .queue-item-text { min-width: 0; flex: 1; }
+  .queue-item-name {
+    font-size: 13px; font-weight: 500; color: var(--ink);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .queue-item-status { font-size: 11.5px; margin-top: 1px; }
+
+  /* ---------- Badges (the "stamp" signature) ---------- */
+  .badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 12px; font-weight: 600;
+    padding: 5px 12px 5px 10px;
+    border-radius: 999px;
+    border: 1.5px dashed currentColor;
+    letter-spacing: .01em;
+  }
+  .badge .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .badge-pending  { color: var(--slate); background: var(--slate-tint); }
+  .badge-processing { color: var(--indigo); background: var(--indigo-tint); }
+  .badge-needs_review { color: var(--amber); background: var(--amber-tint); }
+  .badge-completed { color: var(--emerald); background: var(--emerald-tint); }
+  .badge-failed { color: var(--red); background: var(--red-tint); }
+  .badge-sm { font-size: 10.5px; padding: 2px 8px; border-width: 1px; }
+
+  .spin {
+    animation: spin 0.9s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ---------- Detail panel ---------- */
+  .detail-empty {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 90px 20px; color: var(--ink-faint); text-align: center;
+  }
+  .detail-empty-icon {
+    width: 52px; height: 52px; border-radius: 14px;
+    background: var(--slate-tint);
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 16px;
+  }
+  .detail-header {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    gap: 16px; padding-bottom: 18px; margin-bottom: 18px;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .detail-filename { font-weight: 600; font-size: 15px; word-break: break-all; }
+  .detail-id { font-size: 11.5px; color: var(--ink-faint); margin-top: 3px; }
+  .confidence-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+  .confidence-bar {
+    width: 100px; height: 5px; border-radius: 3px; background: var(--border-soft); overflow: hidden;
+  }
+  .confidence-fill { height: 100%; border-radius: 3px; transition: width .4s ease; }
+  .confidence-label { font-size: 11.5px; color: var(--ink-soft); font-weight: 500; }
+
+  .section-label {
+    font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--ink-faint); margin: 0 0 10px;
+  }
+
+  table.fields-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  table.fields-table th {
+    text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .04em;
+    color: var(--ink-faint); font-weight: 600;
+    padding: 8px 12px; border-bottom: 1px solid var(--border);
+  }
+  table.fields-table td {
+    padding: 11px 12px; border-bottom: 1px solid var(--border-soft);
+    color: var(--ink);
+  }
+  table.fields-table tbody tr { transition: background .1s ease; }
+  table.fields-table tbody tr:hover { background: var(--slate-tint); }
+  table.fields-table tr:last-child td { border-bottom: none; }
+  .field-name { color: var(--ink-soft); }
+  .field-value { font-weight: 500; }
+
+  .anomaly-box {
+    display: flex; gap: 10px;
+    background: var(--amber-tint); border: 1px solid #FDE8C8;
+    border-radius: var(--radius-md);
+    padding: 12px 14px; margin-bottom: 8px;
+  }
+  .anomaly-icon { flex-shrink: 0; color: var(--amber); margin-top: 1px; }
+  .anomaly-text { font-size: 13px; color: #92400E; line-height: 1.45; }
+  .anomaly-type { font-weight: 600; }
+
+  .empty-clean {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 13px; color: var(--emerald); background: var(--emerald-tint);
+    padding: 10px 14px; border-radius: var(--radius-md);
+  }
+
+  /* ---------- Toasts ---------- */
+  #toasts {
+    position: fixed; bottom: 22px; right: 22px; z-index: 100;
+    display: flex; flex-direction: column; gap: 10px;
+    max-width: 340px;
+  }
+  .toast {
+    display: flex; align-items: flex-start; gap: 10px;
+    background: var(--ink); color: #fff;
+    padding: 13px 16px; border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    font-size: 13px; line-height: 1.4;
+    animation: toast-in .25s cubic-bezier(.16,1,.3,1);
+  }
+  .toast.error { background: var(--red); }
+  .toast.success { background: var(--emerald); }
+  @keyframes toast-in {
+    from { opacity: 0; transform: translateY(8px) scale(.97); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  .toast.leaving { animation: toast-out .18s ease forwards; }
+  @keyframes toast-out { to { opacity: 0; transform: translateY(4px); } }
 </style>
 </head>
 <body>
-  <h1>Upload a bill / invoice</h1>
-  <p class="sub">Drag and drop, or click to choose a file (PDF, PNG, JPG, TIFF)</p>
 
-  <div class="dropzone" id="dropzone">
-    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#8a8a8e" stroke-width="1.5">
-      <path d="M12 16V4M12 4l-4 4M12 4l4 4" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke-linecap="round" stroke-linejoin="round"/>
-    </svg>
-    <div>Click or drop a file here</div>
-    <div class="hint">Max file size enforced by server</div>
-    <input type="file" id="fileInput" accept=".pdf,.png,.jpg,.jpeg,.tiff">
+<header>
+  <div class="header-inner">
+    <div class="brand">
+      <div class="brand-mark">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14 3v4a1 1 0 001 1h4"/>
+          <path d="M17 21H7a2 2 0 01-2-2V5a2 2 0 012-2h7l5 5v11a2 2 0 01-2 2z"/>
+          <path d="M9 13h6M9 17h4"/>
+        </svg>
+      </div>
+      <div>
+        <div class="brand-name">IDP Pipeline</div>
+        <div class="brand-sub">Document intelligence</div>
+      </div>
+    </div>
   </div>
+</header>
 
-  <div class="error" id="errorMsg"></div>
-  <div class="results" id="results"></div>
+<main>
+  <h1 class="page-title">Upload a bill or invoice</h1>
+  <p class="page-sub">Documents are OCR'd, redacted, and extracted automatically. Low-confidence results are routed for review.</p>
+
+  <div class="grid">
+    <!-- LEFT: Upload + queue -->
+    <div class="card card-pad">
+      <div class="dropzone" id="dropzone">
+        <div class="dropzone-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4F46E5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 16V4M12 4l-4.5 4.5M12 4l4.5 4.5"/>
+            <path d="M4 15v3a2 2 0 002 2h12a2 2 0 002-2v-3"/>
+          </svg>
+        </div>
+        <div class="dropzone-title">Drop a file, or click to browse</div>
+        <div class="dropzone-hint">PDF, PNG, JPG, or TIFF</div>
+      </div>
+      <input type="file" id="fileInput" accept=".pdf,.png,.jpg,.jpeg,.tiff">
+
+      <div class="queue-heading">Uploads this session</div>
+      <div id="queueList"><div class="queue-empty">Nothing uploaded yet</div></div>
+    </div>
+
+    <!-- RIGHT: Detail panel -->
+    <div class="card card-pad" id="detailPanel">
+      <div class="detail-empty">
+        <div class="detail-empty-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 11l3 3L22 4"/>
+            <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+          </svg>
+        </div>
+        <div style="font-weight:600; font-size:14px; color:#475569;">No document selected</div>
+        <div style="font-size:13px; margin-top:4px;">Upload a bill to see extraction results here</div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div id="toasts"></div>
 
 <script>
 const dropzone = document.getElementById('dropzone');
 const fileInput = document.getElementById('fileInput');
-const results = document.getElementById('results');
-const errorMsg = document.getElementById('errorMsg');
+const queueList = document.getElementById('queueList');
+const detailPanel = document.getElementById('detailPanel');
+const toasts = document.getElementById('toasts');
 
+const docs = {};       // document_id -> { filename, status, confidence, pollHandle }
+let activeId = null;
+
+// ---------- Toasts ----------
+function toast(message, kind = 'default') {
+  const el = document.createElement('div');
+  el.className = 'toast' + (kind !== 'default' ? ' ' + kind : '');
+  el.textContent = message;
+  toasts.appendChild(el);
+  setTimeout(() => {
+    el.classList.add('leaving');
+    setTimeout(() => el.remove(), 200);
+  }, 4200);
+}
+
+// ---------- Upload wiring ----------
 dropzone.addEventListener('click', () => fileInput.click());
 dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag'); });
 dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
@@ -71,66 +348,250 @@ dropzone.addEventListener('drop', e => {
 });
 fileInput.addEventListener('change', () => {
   if (fileInput.files.length) uploadFile(fileInput.files[0]);
+  fileInput.value = '';
 });
 
 async function uploadFile(file) {
-  errorMsg.textContent = '';
   const formData = new FormData();
   formData.append('file', file);
 
-  const card = document.createElement('div');
-  card.className = 'card';
-  card.innerHTML = `<div class="name">${file.name}</div><div class="status pending">Uploading…</div>`;
-  results.prepend(card);
-  const statusEl = card.querySelector('.status');
+  const tempId = 'temp-' + Date.now();
+  docs[tempId] = { filename: file.name, status: 'uploading', confidence: null };
+  renderQueue();
 
   try {
     const res = await fetch('/documents/upload', { method: 'POST', body: formData });
     if (res.status === 429) {
-      statusEl.textContent = 'Rate limit reached — try again later';
-      statusEl.className = 'status failed';
+      delete docs[tempId];
+      renderQueue();
+      toast('Rate limit reached — try again in a bit', 'error');
       return;
     }
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      statusEl.textContent = err.detail || 'Upload failed';
-      statusEl.className = 'status failed';
+      delete docs[tempId];
+      renderQueue();
+      toast(err.detail || 'Upload failed', 'error');
       return;
     }
     const data = await res.json();
-    statusEl.textContent = 'Pending…';
-    pollStatus(data.document_id, statusEl);
+    delete docs[tempId];
+    docs[data.document_id] = { filename: file.name, status: 'pending', confidence: null };
+    activeId = data.document_id;
+    renderQueue();
+    renderDetail(data.document_id);
+    toast(`${file.name} uploaded successfully`, 'success');
+    pollStatus(data.document_id);
   } catch (e) {
-    statusEl.textContent = 'Upload failed — network error';
-    statusEl.className = 'status failed';
+    delete docs[tempId];
+    renderQueue();
+    toast('Upload failed — network error', 'error');
   }
 }
 
-async function pollStatus(documentId, statusEl) {
-  const poll = async () => {
+async function pollStatus(documentId) {
+  const tick = async () => {
+    if (!docs[documentId]) return;
     try {
       const res = await fetch(`/documents/${documentId}/status`);
       if (!res.ok) return;
       const data = await res.json();
-      statusEl.textContent = describeStatus(data.status, data.confidence_score);
-      statusEl.className = 'status ' + data.status;
-      if (data.status === 'pending' || data.status === 'processing') {
-        setTimeout(poll, 3000);
+      const prevStatus = docs[documentId].status;
+      docs[documentId].status = data.status;
+      docs[documentId].confidence = data.confidence_score ?? null;
+
+      if (documentId === activeId) renderDetail(documentId);
+      renderQueue();
+
+      if (prevStatus !== data.status && (data.status === 'completed' || data.status === 'needs_review')) {
+        toast(
+          data.status === 'completed'
+            ? `Extraction finished — ${docs[documentId].filename}`
+            : `${docs[documentId].filename} needs human review`,
+          data.status === 'completed' ? 'success' : 'default'
+        );
+        loadResult(documentId);
+      } else if (prevStatus !== data.status && data.status === 'failed') {
+        toast(`Processing failed — ${docs[documentId].filename}`, 'error');
       }
-    } catch (e) { /* stop polling silently on network error */ }
+
+      if (data.status === 'pending' || data.status === 'processing') {
+        setTimeout(tick, 3000);
+      }
+    } catch (e) { /* stop silently on network error */ }
   };
-  poll();
+  tick();
 }
 
-function describeStatus(status, confidence) {
-  switch (status) {
-    case 'pending': return 'Pending…';
-    case 'processing': return 'Processing…';
-    case 'completed': return `Completed${confidence != null ? ' (' + Math.round(confidence*100) + '% confidence)' : ''}`;
-    case 'needs_review': return 'Needs human review';
-    case 'failed': return 'Processing failed';
-    default: return status;
+async function loadResult(documentId) {
+  try {
+    const res = await fetch(`/documents/${documentId}/result`);
+    if (!res.ok) return;
+    const data = await res.json();
+    docs[documentId].result = data;
+    if (documentId === activeId) renderDetail(documentId);
+  } catch (e) { /* leave without result data */ }
+}
+
+// ---------- Rendering ----------
+function statusMeta(status) {
+  const map = {
+    uploading:    { label: 'Uploading', cls: 'badge-pending' },
+    pending:      { label: 'Pending', cls: 'badge-pending' },
+    processing:   { label: 'Processing', cls: 'badge-processing' },
+    needs_review: { label: 'Needs Review', cls: 'badge-needs_review' },
+    completed:    { label: 'Completed', cls: 'badge-completed' },
+    failed:       { label: 'Failed', cls: 'badge-failed' },
+  };
+  return map[status] || { label: status, cls: 'badge-pending' };
+}
+
+function iconFor(status) {
+  if (status === 'pending' || status === 'processing' || status === 'uploading') {
+    return `<svg class="spin" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M21 12a9 9 0 11-9-9" stroke-opacity=".9"/></svg>`;
   }
+  if (status === 'completed') {
+    return `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>`;
+  }
+  if (status === 'needs_review') {
+    return `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9L1.8 18a1.5 1.5 0 001.3 2.3h17.8a1.5 1.5 0 001.3-2.3L13.7 3.9a1.5 1.5 0 00-2.6 0z"/></svg>`;
+  }
+  return `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>`;
+}
+
+function renderQueue() {
+  const ids = Object.keys(docs).reverse();
+  if (!ids.length) {
+    queueList.innerHTML = '<div class="queue-empty">Nothing uploaded yet</div>';
+    return;
+  }
+  queueList.innerHTML = ids.map(id => {
+    const d = docs[id];
+    const meta = statusMeta(d.status);
+    return `
+      <div class="queue-item ${id === activeId ? 'active' : ''}" onclick="selectDoc('${id}')">
+        <div class="queue-item-icon" style="color:var(--${meta.cls.includes('completed') ? 'emerald' : meta.cls.includes('needs_review') ? 'amber' : meta.cls.includes('failed') ? 'red' : 'indigo'})">
+          ${iconFor(d.status)}
+        </div>
+        <div class="queue-item-text">
+          <div class="queue-item-name">${escapeHtml(d.filename)}</div>
+          <div class="queue-item-status" style="color:var(--${meta.cls.includes('completed') ? 'emerald' : meta.cls.includes('needs_review') ? 'amber' : meta.cls.includes('failed') ? 'red' : 'indigo'})">${meta.label}</div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function selectDoc(id) {
+  activeId = id;
+  renderQueue();
+  renderDetail(id);
+}
+
+function renderDetail(id) {
+  const d = docs[id];
+  if (!d) return;
+  const meta = statusMeta(d.status);
+
+  let confidenceHtml = '';
+  if (d.confidence != null) {
+    const pct = Math.round(d.confidence * 100);
+    const color = pct >= 80 ? 'var(--emerald)' : pct >= 50 ? 'var(--amber)' : 'var(--red)';
+    confidenceHtml = `
+      <div class="confidence-row">
+        <div class="confidence-bar"><div class="confidence-fill" style="width:${pct}%; background:${color};"></div></div>
+        <div class="confidence-label mono">${pct}% confidence</div>
+      </div>`;
+  }
+
+  let bodyHtml = '';
+  if (d.result) {
+    const fields = d.result.fields || {};
+    const fieldRows = Object.keys(fields).length
+      ? Object.entries(fields).map(([k, v]) => `
+          <tr>
+            <td class="field-name">${escapeHtml(prettifyKey(k))}</td>
+            <td class="field-value mono">${escapeHtml(String(v ?? '—'))}</td>
+          </tr>`).join('')
+      : `<tr><td colspan="2" style="color:var(--ink-faint); text-align:center; padding:20px;">No fields extracted</td></tr>`;
+
+    const lineItems = d.result.line_items || [];
+    const lineItemsHtml = lineItems.length ? `
+      <div class="section-label" style="margin-top:22px;">Line items</div>
+      <table class="fields-table">
+        <thead><tr><th>Description</th><th>Qty</th><th>Unit price</th><th>Total</th></tr></thead>
+        <tbody>
+          ${lineItems.map(li => `
+            <tr>
+              <td>${escapeHtml(li.description ?? '—')}</td>
+              <td class="mono">${li.quantity ?? '—'}</td>
+              <td class="mono">${li.unit_price ?? '—'}</td>
+              <td class="mono">${li.line_total ?? '—'}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    ` : '';
+
+    const anomalies = d.result.anomalies || [];
+    const anomalyHtml = anomalies.length
+      ? anomalies.map(a => `
+          <div class="anomaly-box">
+            <div class="anomaly-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9L1.8 18a1.5 1.5 0 001.3 2.3h17.8a1.5 1.5 0 001.3-2.3L13.7 3.9a1.5 1.5 0 00-2.6 0z"/></svg>
+            </div>
+            <div class="anomaly-text">
+              <span class="anomaly-type">${escapeHtml(prettifyKey(a.type || 'Anomaly'))}</span>
+              <span class="badge badge-sm" style="border-style:solid; margin-left:6px; color:${a.severity === 'high' ? 'var(--red)' : 'var(--amber)'}; background:${a.severity === 'high' ? 'var(--red-tint)' : 'var(--amber-tint)'};">${escapeHtml(a.severity || '')}</span>
+              <div style="margin-top:4px;">${formatDetails(a.details)}</div>
+            </div>
+          </div>`).join('')
+      : `<div class="empty-clean">
+           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+           No anomalies detected
+         </div>`;
+
+    bodyHtml = `
+      <div class="section-label" style="margin-top:22px;">Extracted fields</div>
+      <table class="fields-table"><tbody>${fieldRows}</tbody></table>
+      ${lineItemsHtml}
+      <div class="section-label" style="margin-top:24px;">Validation</div>
+      ${anomalyHtml}
+    `;
+  } else if (d.status === 'pending' || d.status === 'processing' || d.status === 'uploading') {
+    bodyHtml = `<div style="padding:36px 0; text-align:center; color:var(--ink-faint); font-size:13px;">
+      Extraction in progress — this updates automatically.
+    </div>`;
+  } else if (d.status === 'failed') {
+    bodyHtml = `<div style="padding:24px 0; text-align:center; color:var(--red); font-size:13px;">
+      This document couldn't be processed. Try re-uploading it.
+    </div>`;
+  }
+
+  detailPanel.innerHTML = `
+    <div class="detail-header">
+      <div>
+        <div class="detail-filename">${escapeHtml(d.filename)}</div>
+        <div class="detail-id mono">${id.startsWith('temp-') ? '' : id}</div>
+        ${confidenceHtml}
+      </div>
+      <span class="badge ${meta.cls}"><span class="dot"></span>${meta.label}</span>
+    </div>
+    ${bodyHtml}
+  `;
+}
+
+function prettifyKey(k) {
+  return k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+function formatDetails(details) {
+  if (!details || typeof details !== 'object') return '';
+  return Object.entries(details)
+    .map(([k, v]) => `<span class="anomaly-text mono" style="opacity:.85;">${escapeHtml(prettifyKey(k))}: ${escapeHtml(String(v))}</span>`)
+    .join('<br>');
+}
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
 }
 </script>
 </body>
