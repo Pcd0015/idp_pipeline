@@ -20,7 +20,9 @@ class Settings(BaseSettings):
     # For higher accuracy on messy/complex layouts, gemini-3.1-pro is available;
     # for the newest fast tier, gemini-3.5-flash. Confirm current model names/pricing
     # at https://ai.google.dev/gemini-api/docs/models before switching in production.
-    llm_model: str = "gemini-2.5-flash"
+    # gemini-2.5-flash was deprecated for new Gemini API keys (mid-2026) —
+    # gemini-3.1-flash-lite is the current cost-efficient equivalent.
+    llm_model: str = "gemini-3.1-flash-lite"
 
     # OCR
     ocr_provider: str = "tesseract"

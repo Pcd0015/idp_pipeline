@@ -38,7 +38,7 @@ services:
       - key: B2_BUCKET_NAME
         sync: false
       - key: LLM_MODEL
-        value: gemini-2.5-flash
+        value: gemini-3.1-flash-lite
       - key: OCR_PROVIDER
         value: tesseract
       - key: CONFIDENCE_THRESHOLD
