@@ -30,9 +30,9 @@ Upload a bill, invoice, purchase order, or receipt — as a photo, scan, or PDF 
 7. **Captures corrections** from reviewers as a feedback dataset for future prompt refinement
 
 <div align="center">
-<img src="docs/assets/dashboard-screenshot.png" alt="IDP Pipeline dashboard showing an extracted invoice with fields, line items, and a Needs Review status" width="800">
+<img src="docs/assets/dashboard-screenshot.png" alt="IDP Pipeline dashboard showing an extracted invoice with per-field confidence scores, line items, a Needs Review status, and links to the review queue and CSV export" width="800">
 
-<sub>Live dashboard — extracted fields, line items, and confidence-based routing, all visible without touching the API directly.</sub>
+<sub>Live dashboard — drag-and-drop or camera capture upload, per-field confidence, line items, and confidence-based routing, all visible without touching the API directly.</sub>
 </div>
 
 ---
@@ -100,11 +100,15 @@ flowchart TD
 | 🧾 **Multi-document support** | Invoices, POs, and receipts — PDF, PNG, JPG, TIFF |
 | 🔒 **PII-safe by design** | Redaction happens before the LLM call or any logging, not after |
 | 🎯 **Confidence-based routing** | Only uncertain or anomalous documents reach a human |
-| 🔁 **Human-in-the-loop feedback** | Corrections are captured for future prompt/model refinement |
+| 🔬 **Per-field confidence + review reasons** | See exactly which field was uncertain, and why a doc was flagged (validation errors, anomalies) |
+| 🔁 **Human-in-the-loop feedback** | Corrections are captured for future prompt/model refinement, via a real reviewer UI at `/review` |
+| 📷 **Camera capture** | Take a photo directly from the browser (live preview on desktop/mobile) — auto-downscaled before upload so large phone photos don't slow down processing |
+| 🗃️ **CSV/JSON export** | Download all extracted results, one row per document, straight into a spreadsheet |
+| 🔔 **Optional webhook notifications** | Get pinged (Slack/Discord/Zapier — no signup beyond a free webhook URL) when a document completes or needs review |
 | ⚡ **Streaming uploads** | Files are size-checked and written in chunks — never fully buffered in memory |
 | 🚦 **Rate limited** | Per-IP upload limits protect against abuse on a public endpoint |
 | 🗂️ **Pluggable storage** | Local disk for dev, Backblaze B2 (S3-compatible) for production |
-| 📊 **Live dashboard** | Drag-and-drop upload, real-time status, extracted-field and anomaly views — no API client needed |
+| 📊 **Live dashboard** | Drag-and-drop or camera upload, real-time status, extracted-field and anomaly views — no API client needed |
 
 ---
 
@@ -199,6 +203,17 @@ pipeline: it lists everything in `needs_review`, shows *why* each doc was
 flagged (validation errors, anomalies, low-confidence fields highlighted in
 red), and lets you edit/confirm fields inline — no `curl` required. Paste
 your `X-Admin-Key` at the top if you've set one.
+
+### Camera capture
+
+The dashboard's **Take photo** button opens a live camera preview
+(desktop webcam or phone camera) with Capture / Retake / Use this photo
+controls — no need to take a photo in a separate app and then upload it.
+Captured photos are automatically downscaled to a 1800px max dimension
+before upload, since a full-resolution phone photo is far more detail than
+OCR needs and can noticeably slow down preprocessing on a free-tier CPU.
+On browsers without live camera support (or if permission is denied), it
+falls back to opening the device's native camera app instead.
 
 ### Optional webhook notifications
 
