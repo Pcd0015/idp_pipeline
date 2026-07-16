@@ -35,7 +35,7 @@ python -m venv venv
 source venv/bin/activate          # Windows: venv\Scripts\activate
 
 pip install -r requirements.txt
-python -m spacy download en_core_web_lg
+python -m spacy download en_core_web_sm
 
 cp .env.example .env
 # edit .env: set DATABASE_URL, REDIS_URL, GEMINI_API_KEY to your local values
